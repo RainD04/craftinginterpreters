@@ -48,13 +48,21 @@ class Parser {
 //< Statements and State parse
 //> expression
   private Expr expression() {
-/* Parsing Expressions expression < Statements and State expression
-    return equality();
-*/
-//> Statements and State expression
-    return assignment();
-//< Statements and State expression
-  }
+/private Expr expression() {
+      return comma();
+    }
+
+    private Expr comma() {
+      Expr expr = equality();
+
+      while (match(COMMA)) {
+        Token operator = previous();
+        Expr right = equality();
+        expr = new Expr.Binary(expr, operator, right);
+      }
+
+      return expr;
+    }
 //< expression
 //> Statements and State declaration
   private Stmt declaration() {
@@ -416,8 +424,8 @@ class Parser {
     if (!check(RIGHT_PAREN)) {
       do {
 //> check-max-arity
-        if (arguments.size() >= 255) {
-          error(peek(), "Can't have more than 255 arguments.");
+        if (arguments.size() >= 8) {
+          error(peek(), "Can't have more than 8 arguments.");
         }
 //< check-max-arity
         arguments.add(expression());
