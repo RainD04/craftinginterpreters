@@ -49,7 +49,25 @@ class Parser {
 //> expression
   private Expr expression() {
 /private Expr expression() {
-      return comma();
+      return conditional();
+    }
+
+    private Expr expression() {
+      return conditional();
+    }
+
+    private Expr conditional() {
+      Expr expr = equality();
+
+      if (match(QUESTION)) {
+        Expr thenBranch = expression();
+        consume(COLON,
+                "Expect ':' after then branch of conditional expression.");
+        Expr elseBranch = conditional();
+        expr = new Expr.Conditional(expr, thenBranch, elseBranch);
+      }
+
+      return expr;
     }
 
     private Expr comma() {
