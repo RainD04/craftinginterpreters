@@ -18,6 +18,7 @@ class Parser {
 //< parse-error
   private final List<Token> tokens;
   private int current = 0;
+  private int loopDepth = 0;
   private boolean allowExpression;
   private boolean foundExpression = false;
 
@@ -151,6 +152,8 @@ class Parser {
 //< Classes parse-class-declaration
 //> Statements and State parse-statement
   private Stmt statement() {
+      if (match(BREAK)) return breakStatement();
+    }
 //> Control Flow match-for
     if (match(FOR)) return forStatement();
 //< Control Flow match-for
@@ -205,31 +208,38 @@ class Parser {
     consume(RIGHT_PAREN, "Expect ')' after for clauses.");
 //< for-increment
 //> for-body
-    Stmt body = statement();
+    try {
+      loopDepth++;
+      Stmt body = statement();
 
-//> for-desugar-increment
-    if (increment != null) {
-      body = new Stmt.Block(
-          Arrays.asList(
-              body,
-              new Stmt.Expression(increment)));
+      if (increment != null) {
+        body = new Stmt.Block(Arrays.asList(
+                body,
+                new Stmt.Expression(increment)));
+      }
+
+      if (condition == null) condition = new Expr.Literal(true);
+      body = new Stmt.While(condition, body);
+
+      if (initializer != null) {
+        body = new Stmt.Block(Arrays.asList(initializer, body));
+      }
+
+      return body;
+    } finally {
+      loopDepth--;
     }
 
-//< for-desugar-increment
-//> for-desugar-condition
-    if (condition == null) condition = new Expr.Literal(true);
-    body = new Stmt.While(condition, body);
-
-//< for-desugar-condition
-//> for-desugar-initializer
-    if (initializer != null) {
-      body = new Stmt.Block(Arrays.asList(initializer, body));
-    }
-
-//< for-desugar-initializer
-    return body;
 //< for-body
   }
+  private Stmt breakStatement() {
+    if (loopDepth == 0) {
+      error(previous(), "Must be inside a loop to use 'break'.");
+    }
+    consume(SEMICOLON, "Expect ';' after 'break'.");
+    return new Stmt.Break();
+  }
+
 //< Control Flow for-statement
 //> Control Flow if-statement
   private Stmt ifStatement() {
@@ -285,7 +295,14 @@ class Parser {
     consume(RIGHT_PAREN, "Expect ')' after condition.");
     Stmt body = statement();
 
-    return new Stmt.While(condition, body);
+    try {
+      loopDepth++;
+      Stmt body = statement();
+
+      return new Stmt.While(condition, body);
+    } finally {
+      loopDepth--;
+    }
   }
 //< Control Flow while-statement
 //> Statements and State parse-expression-statement

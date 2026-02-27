@@ -546,3 +546,21 @@ private static Object uninitialized = new Object();
   }
 //< stringify
 }
+
+private static class BreakException extends RuntimeException {
+  @Override
+  public Void visitBreakStmt(Stmt.Break stmt) {
+    throw new BreakException();
+    @Override
+    public Void visitWhileStmt (Stmt.While stmt){
+      try {
+        while (isTruthy(evaluate(stmt.condition))) {
+          execute(stmt.body);
+        }
+      } catch (BreakException ex) {
+        // Do nothing.
+      }
+      return null;
+    }
+  }
+}
