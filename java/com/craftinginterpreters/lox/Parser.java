@@ -18,6 +18,8 @@ class Parser {
 //< parse-error
   private final List<Token> tokens;
   private int current = 0;
+  private boolean allowExpression;
+  private boolean foundExpression = false;
 
   Parser(List<Token> tokens) {
     this.tokens = tokens;
@@ -101,6 +103,24 @@ class Parser {
   }
 //< Statements and State declaration
 //> Classes parse-class-declaration
+
+    Object parseRepl() {
+      allowExpression = true;
+      List<Stmt> statements = new ArrayList<>();
+      while (!isAtEnd()) {
+        statements.add(declaration());
+
+        if (foundExpression) {
+          Stmt last = statements.get(statements.size() - 1);
+          return ((Stmt.Expression) last).expression;
+        }
+
+        allowExpression = false;
+      }
+
+      return statements;
+    }
+
   private Stmt classDeclaration() {
     Token name = consume(IDENTIFIER, "Expect class name.");
 //> Inheritance parse-superclass
@@ -269,11 +289,16 @@ class Parser {
   }
 //< Control Flow while-statement
 //> Statements and State parse-expression-statement
-  private Stmt expressionStatement() {
-    Expr expr = expression();
-    consume(SEMICOLON, "Expect ';' after expression.");
-    return new Stmt.Expression(expr);
-  }
+    private Stmt expressionStatement() {
+      Expr expr = expression();
+
+      if (allowExpression && isAtEnd()) {
+        foundExpression = true;
+      } else {
+        consume(SEMICOLON, "Expect ';' after expression.");
+      }
+      return new Stmt.Expression(expr);
+    }
 //< Statements and State parse-expression-statement
 //> Functions parse-function
   private Stmt.Function function(String kind) {
