@@ -92,7 +92,10 @@ class Parser {
       if (match(CLASS)) return classDeclaration();
 //< Classes match-class
 //> Functions match-fun
-      if (match(FUN)) return function("function");
+      if (check(FUN) && checkNext(IDENTIFIER)) {
+        consume(FUN, null);
+        return function("function");
+      }
 //< Functions match-fun
       if (match(VAR)) return varDeclaration();
 
@@ -320,27 +323,25 @@ class Parser {
 //> Functions parse-function
   private Stmt.Function function(String kind) {
     Token name = consume(IDENTIFIER, "Expect " + kind + " name.");
-//> parse-parameters
+    return new Stmt.Function(name, functionBody(kind));
+  }
+
+  private Expr.Function functionBody(String kind) {
     consume(LEFT_PAREN, "Expect '(' after " + kind + " name.");
     List<Token> parameters = new ArrayList<>();
     if (!check(RIGHT_PAREN)) {
       do {
-        if (parameters.size() >= 255) {
-          error(peek(), "Can't have more than 255 parameters.");
+        if (parameters.size() >= 8) {
+          error(peek(), "Can't have more than 8 parameters.");
         }
-
-        parameters.add(
-            consume(IDENTIFIER, "Expect parameter name."));
+        parameters.add(consume(IDENTIFIER, "Expect parameter name."));
       } while (match(COMMA));
     }
     consume(RIGHT_PAREN, "Expect ')' after parameters.");
-//< parse-parameters
-//> parse-body
 
     consume(LEFT_BRACE, "Expect '{' before " + kind + " body.");
     List<Stmt> body = block();
-    return new Stmt.Function(name, parameters, body);
-//< parse-body
+    return new Expr.Function(parameters, body);
   }
 //< Functions parse-function
 //> Statements and State block
@@ -529,6 +530,8 @@ class Parser {
         return new Expr.Literal(previous().literal);
       }
 
+      if (match(FUN)) return functionBody("function");
+
       if (match(LEFT_PAREN)) {
         Expr expr = expression();
         consume(RIGHT_PAREN, "Expect ')' after expression.");
@@ -586,6 +589,12 @@ class Parser {
   private boolean check(TokenType type) {
     if (isAtEnd()) return false;
     return peek().type == type;
+  }
+
+  private boolean checkNext(TokenType type) {
+    if (isAtEnd()) return false;
+    if (tokens.get(current + 1).type == EOF) return false;
+    return tokens.get(current + 1).type == type;
   }
 //< check
 //> advance

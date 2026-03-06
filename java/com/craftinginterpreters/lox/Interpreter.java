@@ -148,13 +148,8 @@ private static Object uninitialized = new Object();
 
     Map<String, LoxFunction> methods = new HashMap<>();
     for (Stmt.Function method : stmt.methods) {
-/* Classes interpret-methods < Classes interpreter-method-initializer
-      LoxFunction function = new LoxFunction(method, environment);
-*/
-//> interpreter-method-initializer
-      LoxFunction function = new LoxFunction(method, environment,
+      LoxFunction function = new LoxFunction(method.name.lexeme, method.function, environment,
           method.name.lexeme.equals("init"));
-//< interpreter-method-initializer
       methods.put(method.name.lexeme, function);
     }
 
@@ -190,18 +185,13 @@ private static Object uninitialized = new Object();
 //> Functions visit-function
   @Override
   public Void visitFunctionStmt(Stmt.Function stmt) {
-/* Functions visit-function < Functions visit-closure
-    LoxFunction function = new LoxFunction(stmt);
-*/
-/* Functions visit-closure < Classes construct-function
-    LoxFunction function = new LoxFunction(stmt, environment);
-*/
-//> Classes construct-function
-    LoxFunction function = new LoxFunction(stmt, environment,
-                                           false);
-//< Classes construct-function
-    environment.define(stmt.name.lexeme, function);
+    String fnName = stmt.name.lexeme;
+    environment.define(fnName, new LoxFunction(fnName, stmt.function, environment, false));
     return null;
+  }
+  @Override
+  public Object visitFunctionExpr(Expr.Function expr) {
+    return new LoxFunction(null, expr, environment, false);
   }
 //< Functions visit-function
 //> Control Flow visit-if
@@ -330,7 +320,7 @@ private static Object uninitialized = new Object();
         checkNumberOperands(expr.operator, left, right);
 
         if ((double)right ==0){
-          throw new RuntimeError(expr.operator, message: "Cannot divide by zero.");
+          throw new RuntimeError(expr.operator, "Cannot divide by zero.");
         }
 //< check-slash-operand
         return (double)left / (double)right;
@@ -545,22 +535,4 @@ private static Object uninitialized = new Object();
     return object.toString();
   }
 //< stringify
-}
-
-private static class BreakException extends RuntimeException {
-  @Override
-  public Void visitBreakStmt(Stmt.Break stmt) {
-    throw new BreakException();
-    @Override
-    public Void visitWhileStmt (Stmt.While stmt){
-      try {
-        while (isTruthy(evaluate(stmt.condition))) {
-          execute(stmt.body);
-        }
-      } catch (BreakException ex) {
-        // Do nothing.
-      }
-      return null;
-    }
-  }
 }
