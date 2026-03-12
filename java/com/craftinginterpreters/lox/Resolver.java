@@ -118,6 +118,7 @@ private final Stack<Map<String, Variable>> scopes = new Stack<>();//< scopes-fie
 //> resolver-begin-this-scope
     beginScope();
     scopes.peek().put("this", true);
+    scopes.peek().put("inner", true);
 
 //< resolver-begin-this-scope
     for (Stmt.Function method : stmt.methods) {
