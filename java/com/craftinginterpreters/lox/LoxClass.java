@@ -8,9 +8,10 @@ import java.util.Map;
 class LoxClass {
 */
 //> lox-class-callable
-class LoxClass implements LoxCallable {
-//< lox-class-callable
+class LoxClass extends LoxInstance implements LoxCallable {
+  //< lox-class-callable
   final String name;
+  private final Map<String, LoxFunction> methods;
 //> Inheritance lox-class-superclass-field
   final LoxClass superclass;
 //< Inheritance lox-class-superclass-field

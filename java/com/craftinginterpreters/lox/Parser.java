@@ -138,10 +138,12 @@ class Parser {
 //< Inheritance parse-superclass
     consume(LEFT_BRACE, "Expect '{' before class body.");
 
-    List<Stmt.Function> methods = new ArrayList<>();
-    while (!check(RIGHT_BRACE) && !isAtEnd()) {
-      methods.add(function("method"));
-    }
+      List<Stmt.Function> methods = new ArrayList<>();
+      List<Stmt.Function> classMethods = new ArrayList<>();
+      while (!check(RIGHT_BRACE) && !isAtEnd()) {
+        boolean isClassMethod = match(CLASS);
+        (isClassMethod ? classMethods : methods).add(function("method"));
+      }
 
     consume(RIGHT_BRACE, "Expect '}' after class body.");
 
@@ -149,9 +151,8 @@ class Parser {
     return new Stmt.Class(name, methods);
 */
 //> Inheritance construct-class-ast
-    return new Stmt.Class(name, superclass, methods);
-//< Inheritance construct-class-ast
-  }
+      return new Stmt.Class(name, superclass, methods, classMethods);
+}
 //< Classes parse-class-declaration
 //> Statements and State parse-statement
   private Stmt statement() {

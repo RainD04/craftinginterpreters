@@ -138,6 +138,17 @@ private static Object uninitialized = new Object();
 //< Inheritance interpret-superclass
     environment.define(stmt.name.lexeme, null);
 //> Inheritance begin-superclass-environment
+    Map<String, LoxFunction> classMethods = new HashMap<>();
+    for (Stmt.Function method : stmt.classMethods) {
+      LoxFunction function =
+              new LoxFunction(method.name.lexeme, method.function, environment, false);
+      classMethods.put(method.name.lexeme, function);
+    }
+
+
+    LoxClass metaclass =
+            new LoxClass(null, stmt.name.lexeme + " metaclass", classMethods);
+
 
     if (stmt.superclass != null) {
       environment = new Environment(environment);
@@ -157,8 +168,7 @@ private static Object uninitialized = new Object();
     LoxClass klass = new LoxClass(stmt.name.lexeme, methods);
 */
 //> Inheritance interpreter-construct-class
-    LoxClass klass = new LoxClass(stmt.name.lexeme,
-        (LoxClass)superclass, methods);
+    LoxClass klass = new LoxClass(metaclass, stmt.name.lexeme, methods);
 //> end-superclass-environment
 
     if (superclass != null) {
