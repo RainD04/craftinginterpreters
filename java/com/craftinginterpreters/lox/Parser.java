@@ -322,28 +322,31 @@ class Parser {
     }
 //< Statements and State parse-expression-statement
 //> Functions parse-function
-  private Stmt.Function function(String kind) {
-    Token name = consume(IDENTIFIER, "Expect " + kind + " name.");
-    return new Stmt.Function(name, functionBody(kind));
-  }
+private Stmt.Function function(String kind) {
+  Token name = consume(IDENTIFIER, "Expect " + kind + " name.");
 
-  private Expr.Function functionBody(String kind) {
+  List<Token> parameters = null;
+
+  // Allow omitting the parameter list entirely in method getters.
+  if (!kind.equals("method") || check(LEFT_PAREN)) {
     consume(LEFT_PAREN, "Expect '(' after " + kind + " name.");
-    List<Token> parameters = new ArrayList<>();
+    parameters = new ArrayList<>();
     if (!check(RIGHT_PAREN)) {
       do {
-        if (parameters.size() >= 8) {
-          error(peek(), "Can't have more than 8 parameters.");
+        if (parameters.size() >= 255) {
+          error(peek(), "Can't have more than 255 parameters.");
         }
+
         parameters.add(consume(IDENTIFIER, "Expect parameter name."));
       } while (match(COMMA));
     }
     consume(RIGHT_PAREN, "Expect ')' after parameters.");
-
-    consume(LEFT_BRACE, "Expect '{' before " + kind + " body.");
-    List<Stmt> body = block();
-    return new Expr.Function(parameters, body);
   }
+
+  consume(LEFT_BRACE, "Expect '{' before " + kind + " body.");
+  List<Stmt> body = block();
+  return new Stmt.Function(name, parameters, body);
+}
 //< Functions parse-function
 //> Statements and State block
   private List<Stmt> block() {

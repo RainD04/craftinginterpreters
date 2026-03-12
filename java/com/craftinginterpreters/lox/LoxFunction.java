@@ -65,6 +65,12 @@ class LoxFunction implements LoxCallable {
 //> call-closure
     Environment environment = new Environment(closure);
 //< call-closure
+    if (declaration.params != null) {
+      for (int i = 0; i < declaration.params.size(); i++) {
+        environment.define(declaration.params.get(i).lexeme,
+                arguments.get(i));
+      }
+    }
     for (int i = 0; i < declaration.parameters.size(); i++) {
       environment.define(declaration.parameters.get(i).lexeme,
           arguments.get(i));
@@ -91,4 +97,7 @@ class LoxFunction implements LoxCallable {
     return null;
   }
 //< function-call
+}
+public boolean isGetter() {
+  return declaration.params == null;
 }
