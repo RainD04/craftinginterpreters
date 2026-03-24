@@ -11,6 +11,7 @@
 typedef enum {
 //> op-constant
   OP_CONSTANT,
+  OP_CONSTANT_LONG,
 //< op-constant
 //> Types of Values literal-ops
   OP_NIL,
@@ -152,5 +153,6 @@ void writeChunk(Chunk* chunk, uint8_t byte, int line);
 //> add-constant-h
 int addConstant(Chunk* chunk, Value value);
 //< add-constant-h
+void writeConstant(Chunk* chunk, Value value, int line);
 
 #endif
