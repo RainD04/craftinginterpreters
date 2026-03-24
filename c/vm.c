@@ -33,7 +33,7 @@ static Value clockNative(int argCount, Value* args) {
 //< Calls and Functions clock-native
 //> reset-stack
 static void resetStack() {
-  vm.stackTop = vm.stack;
+  vm.stackCount = 0;
 //> Calls and Functions reset-frame-count
   vm.frameCount = 0;
 //< Calls and Functions reset-frame-count
@@ -96,6 +96,8 @@ static void defineNative(const char* name, NativeFn function) {
 //< Calls and Functions define-native
 
 void initVM() {
+  vm.stack = NULL;
+  vm.stackCapacity = 0;
 //> call-reset-stack
   resetStack();
 //< call-reset-stack
@@ -142,25 +144,37 @@ void freeVM() {
 //> Methods and Initializers clear-init-string
   vm.initString = NULL;
 //< Methods and Initializers clear-init-string
+
+  FREE_ARRAY(Value, vm.stack, vm.stackCapacity);
+  vm.stack = NULL;
+  vm.stackCount = 0;
+  vm.stackCapacity = 0;
+
 //> Strings call-free-objects
   freeObjects();
 //< Strings call-free-objects
 }
 //> push
 void push(Value value) {
-  *vm.stackTop = value;
-  vm.stackTop++;
+  if (vm.stackCapacity < vm.stackCount + 1) {
+    int oldCapacity = vm.stackCapacity;
+    vm.stackCapacity = GROW_CAPACITY(oldCapacity);
+    vm.stack = GROW_ARRAY(Value, vm.stack, oldCapacity, vm.stackCapacity);
+  }
+
+  vm.stack[vm.stackCount] = value;
+  vm.stackCount++;
 }
 //< push
 //> pop
 Value pop() {
-  vm.stackTop--;
-  return *vm.stackTop;
+  vm.stackCount--;
+  return vm.stack[vm.stackCount];
 }
 //< pop
 //> Types of Values peek
 static Value peek(int distance) {
-  return vm.stackTop[-1 - distance];
+  return vm.stack[vm.stackCount - 1 - distance];
 }
 //< Types of Values peek
 /* Calls and Functions call < Closures call-signature
@@ -201,7 +215,7 @@ static bool call(ObjClosure* closure, int argCount) {
   frame->closure = closure;
   frame->ip = closure->function->chunk.code;
 //< Closures call-init-closure
-  frame->slots = vm.stackTop - argCount - 1;
+  frame->slots = vm.stack + vm.stackCount - argCount - 1;
   return true;
 }
 //< Calls and Functions call
@@ -213,16 +227,16 @@ static bool callValue(Value callee, int argCount) {
       case OBJ_BOUND_METHOD: {
         ObjBoundMethod* bound = AS_BOUND_METHOD(callee);
 //> store-receiver
-        vm.stackTop[-argCount - 1] = bound->receiver;
-//< store-receiver
+        vm.stack[vm.stackCount - argCount - 1] = bound->receiver;
+        //< store-receiver
         return call(bound->method, argCount);
       }
 //< Methods and Initializers call-bound-method
 //> Classes and Instances call-class
       case OBJ_CLASS: {
         ObjClass* klass = AS_CLASS(callee);
-        vm.stackTop[-argCount - 1] = OBJ_VAL(newInstance(klass));
-//> Methods and Initializers call-init
+        vm.stack[vm.stackCount - argCount - 1] = OBJ_VAL(newInstance(klass));
+        //> Methods and Initializers call-init
         Value initializer;
         if (tableGet(&klass->methods, vm.initString,
                      &initializer)) {
@@ -249,8 +263,8 @@ static bool callValue(Value callee, int argCount) {
 //> call-native
       case OBJ_NATIVE: {
         NativeFn native = AS_NATIVE(callee);
-        Value result = native(argCount, vm.stackTop - argCount);
-        vm.stackTop -= argCount + 1;
+        Value result = native(argCount, vm.stack + vm.stackCount - argCount);
+        vm.stackCount -= argCount + 1;
         push(result);
         return true;
       }
@@ -290,7 +304,7 @@ static bool invoke(ObjString* name, int argCount) {
 
   Value value;
   if (tableGet(&instance->fields, name, &value)) {
-    vm.stackTop[-argCount - 1] = value;
+    vm.stack[vm.stackCount - argCount - 1] = value;
     return callValue(value, argCount);
   }
 
@@ -451,7 +465,7 @@ static InterpretResult run() {
 #ifdef DEBUG_TRACE_EXECUTION
 //> trace-stack
     printf("          ");
-    for (Value* slot = vm.stack; slot < vm.stackTop; slot++) {
+    for (Value* slot = vm.stack; slot < vm.stack + vm.stackCount; slot++) {
       printf("[ ");
       printValue(*slot);
       printf(" ]");
@@ -811,8 +825,7 @@ static InterpretResult run() {
           return INTERPRET_OK;
         }
 
-        vm.stackTop = frame->slots;
-        push(result);
+        vm.stackCount = (int)(frame->slots - vm.stack);        push(result);
         frame = &vm.frames[vm.frameCount - 1];
         break;
 //< Calls and Functions interpret-return
