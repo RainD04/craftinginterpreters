@@ -36,6 +36,7 @@ typedef struct {
 typedef enum {
   PREC_NONE,
   PREC_ASSIGNMENT,  // =
+  PREC_TERNARY,     // ?:
   PREC_OR,          // or
   PREC_AND,         // and
   PREC_EQUALITY,    // == !=
@@ -402,6 +403,7 @@ static void endScope() {
 //> Compiling Expressions forward-declarations
 
 static void expression();
+static void ternary(bool canAssign);
 //> Global Variables forward-declarations
 static void statement();
 static void declaration();
@@ -482,7 +484,7 @@ static int resolveUpvalue(Compiler* compiler, Token* name) {
   if (upvalue != -1) {
     return addUpvalue(compiler, (uint8_t)upvalue, false);
   }
-  
+
 //< resolve-upvalue-recurse
   return -1;
 }
@@ -520,7 +522,7 @@ static void declareVariable() {
     if (local->depth != -1 && local->depth < current->scopeDepth) {
       break; // [negative]
     }
-    
+
     if (identifiersEqual(name, &local->name)) {
       error("Already a variable with this name in this scope.");
     }
@@ -699,6 +701,37 @@ static void or_(bool canAssign) {
   parsePrecedence(PREC_OR);
   patchJump(endJump);
 }
+// Compile C-style conditional operator: condition ? thenExpr : elseExpr
+// Right-associative: the else branch parses at PREC_TERNARY.
+static void ternary(bool canAssign) {
+  (void)canAssign;
+
+  // If the condition is false, jump to the else branch.
+  int elseJump = emitJump(OP_JUMP_IF_FALSE);
+
+  // Condition is true; discard it.
+  emitByte(OP_POP);
+
+  // Parse/compile the then-branch. Using expression() allows assignments, etc.
+  expression();
+
+  // Jump over the else branch after then-branch executes.
+  int endJump = emitJump(OP_JUMP);
+
+  // Else branch starts here.
+  patchJump(elseJump);
+
+  // Condition is false; discard it.
+  emitByte(OP_POP);
+
+  consume(TOKEN_COLON, "Expect ':' after then branch of conditional expression.");
+
+  // Right-associative: parse else-branch at the same precedence.
+  parsePrecedence(PREC_TERNARY);
+
+  // End of conditional expression.
+  patchJump(endJump);
+}
 //< Jumping Back and Forth or
 /* Strings parse-string < Global Variables string
 static void string() {
@@ -799,7 +832,7 @@ static void super_(bool canAssign) {
   consume(TOKEN_IDENTIFIER, "Expect superclass method name.");
   uint8_t name = identifierConstant(&parser.previous);
 //> super-get
-  
+
   namedVariable(syntheticToken("this"), false);
 /* Superclasses super-get < Superclasses super-invoke
   namedVariable(syntheticToken("super"), false);
@@ -826,7 +859,7 @@ static void this_(bool canAssign) {
     error("Can't use 'this' outside of a class.");
     return;
   }
-  
+
 //< this-outside-class
   variable(false);
 } // [this]
@@ -870,6 +903,8 @@ ParseRule rules[] = {
   [TOKEN_LEFT_BRACE]    = {NULL,     NULL,   PREC_NONE}, // [big]
   [TOKEN_RIGHT_BRACE]   = {NULL,     NULL,   PREC_NONE},
   [TOKEN_COMMA]         = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_QUESTION]      = {NULL,     ternary, PREC_TERNARY},
+  [TOKEN_COLON]         = {NULL,     NULL,   PREC_NONE},
 /* Compiling Expressions rules < Classes and Instances table-dot
   [TOKEN_DOT]           = {NULL,     NULL,   PREC_NONE},
 */
