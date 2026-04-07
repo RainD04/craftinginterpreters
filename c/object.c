@@ -109,10 +109,11 @@ static ObjString* allocateString(char* chars, int length) {
 */
 //> allocate-string
 //> Hash Tables allocate-string
-static ObjString* allocateString(char* chars, int length,
+static ObjString* allocateString(bool ownsChars, const char* chars, int length,
                                  uint32_t hash) {
 //< Hash Tables allocate-string
   ObjString* string = ALLOCATE_OBJ(ObjString, OBJ_STRING);
+  string->ownsChars = ownsChars;
   string->length = length;
   string->chars = chars;
 //> Hash Tables allocate-store-hash
@@ -143,20 +144,26 @@ static uint32_t hashString(const char* key, int length) {
 }
 //< Hash Tables hash-string
 //> take-string
-ObjString* makeString(int length) {
-  ObjString* string = (ObjString*)allocateObject(
-      sizeof(ObjString) + length + 1, OBJ_STRING);
-  string->length = length;
-  return string;
+ObjString* makeString(bool ownsChars, char* chars, int length) {
+  uint32_t hash = hashString(chars, length);
+
+  // If an identical string is already interned, reuse it.
+  ObjString* interned = tableFindString(&vm.strings, chars, length, hash);
+  if (interned != NULL) {
+    if (ownsChars) {
+      FREE_ARRAY(char, chars, length + 1);
+    }
+    return interned;
+  }
+
+  return allocateString(ownsChars, chars, length, hash);
 }
 
 ObjString* copyString(const char* chars, int length) {
-  ObjString* string = makeString(length);
-
-  memcpy(string->chars, chars, length);
-  string->chars[length] = '\0';
-
-  return string;
+  char* heapChars = ALLOCATE(char, length + 1);
+  memcpy(heapChars, chars, length);
+  heapChars[length] = '\0';
+  return makeString(true, heapChars, length);
 }
 //> Closures new-upvalue
 ObjUpvalue* newUpvalue(Value* slot) {
@@ -179,7 +186,7 @@ static void printFunction(ObjFunction* function) {
     return;
   }
 //< print-script
-  printf("<fn %s>", function->name->chars);
+  printf("<fn %.*s>", function->name->length, function->name->chars);
 }
 //< Calls and Functions print-function-helper
 //> print-object
@@ -188,11 +195,12 @@ static void concatenate() {
   ObjString* a = AS_STRING(pop());
 
   int length = a->length + b->length;
-  ObjString* result = makeString(length);
-  memcpy(result->chars, a->chars, a->length);
-  memcpy(result->chars + a->length, b->chars, b->length);
-  result->chars[length] = '\0';
+  char* chars = ALLOCATE(char, length + 1);
+  memcpy(chars, a->chars, a->length);
+  memcpy(chars + a->length, b->chars, b->length);
+  chars[length] = '\0';
 
+  ObjString* result = makeString(true, chars, length);
   push(OBJ_VAL(result));
 }
 void printObject(Value value) {
@@ -204,7 +212,7 @@ void printObject(Value value) {
 //< Methods and Initializers print-bound-method
 //> Classes and Instances print-class
     case OBJ_CLASS:
-      printf("%s", AS_CLASS(value)->name->chars);
+      printf("%.*s", AS_CLASS(value)->name->length, AS_CLASS(value)->name->chars);
       break;
 //< Classes and Instances print-class
 //> Closures print-closure
@@ -219,7 +227,8 @@ void printObject(Value value) {
 //< Calls and Functions print-function
 //> Classes and Instances print-instance
     case OBJ_INSTANCE:
-      printf("%s instance",
+      printf("%.*s instance",
+             AS_INSTANCE(value)->klass->name->length,
              AS_INSTANCE(value)->klass->name->chars);
       break;
 //< Classes and Instances print-instance
@@ -229,7 +238,7 @@ void printObject(Value value) {
       break;
 //< Calls and Functions print-native
     case OBJ_STRING:
-      printf("%s", AS_CSTRING(value));
+      printf("%.*s", AS_STRING(value)->length, AS_CSTRING(value));
       break;
 //> Closures print-upvalue
     case OBJ_UPVALUE:

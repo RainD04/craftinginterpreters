@@ -739,9 +739,13 @@ static void string() {
 //> Strings parse-string
 //> Global Variables string
 static void string(bool canAssign) {
+  (void)canAssign;
 //< Global Variables string
-  emitConstant(OBJ_VAL(copyString(parser.previous.start + 1,
-                                  parser.previous.length - 2)));
+    emitConstant(OBJ_VAL(makeString(
+      false,
+      (char*)parser.previous.start + 1,
+      parser.previous.length - 2
+  )));
 }
 //< Strings parse-string
 /* Global Variables read-named-variable < Global Variables named-variable-signature

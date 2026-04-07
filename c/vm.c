@@ -77,7 +77,7 @@ static void runtimeError(const char* format, ...) {
     if (function->name == NULL) {
       fprintf(stderr, "script\n");
     } else {
-      fprintf(stderr, "%s()\n", function->name->chars);
+      fprintf(stderr, "%.*s()\n", function->name->length, function->name->chars);
     }
   }
 
@@ -282,7 +282,7 @@ static bool invokeFromClass(ObjClass* klass, ObjString* name,
                             int argCount) {
   Value method;
   if (!tableGet(&klass->methods, name, &method)) {
-    runtimeError("Undefined property '%s'.", name->chars);
+    runtimeError("Undefined property '%.*s'.", name->length, name->chars);
     return false;
   }
   return call(AS_CLOSURE(method), argCount);
@@ -316,7 +316,7 @@ static bool invoke(ObjString* name, int argCount) {
 static bool bindMethod(ObjClass* klass, ObjString* name) {
   Value method;
   if (!tableGet(&klass->methods, name, &method)) {
-    runtimeError("Undefined property '%s'.", name->chars);
+    runtimeError("Undefined property '%.*s'.", name->length, name->chars);
     return false;
   }
 
@@ -390,14 +390,13 @@ static void concatenate() {
   ObjString* b = AS_STRING(peek(0));
   ObjString* a = AS_STRING(peek(1));
 //< Garbage Collection concatenate-peek
-
   int length = a->length + b->length;
   char* chars = ALLOCATE(char, length + 1);
   memcpy(chars, a->chars, a->length);
   memcpy(chars + a->length, b->chars, b->length);
   chars[length] = '\0';
 
-  ObjString* result = takeString(chars, length);
+  ObjString* result = makeString(true, chars, length);
 //> Garbage Collection concatenate-pop
   pop();
   pop();
@@ -539,7 +538,7 @@ static InterpretResult run() {
         ObjString* name = READ_STRING();
         Value value;
         if (!tableGet(&vm.globals, name, &value)) {
-          runtimeError("Undefined variable '%s'.", name->chars);
+          runtimeError("Undefined variable '%.*s'.", name->length, name->chars);
           return INTERPRET_RUNTIME_ERROR;
         }
         push(value);
@@ -559,7 +558,7 @@ static InterpretResult run() {
         ObjString* name = READ_STRING();
         if (tableSet(&vm.globals, name, peek(0))) {
           tableDelete(&vm.globals, name); // [delete]
-          runtimeError("Undefined variable '%s'.", name->chars);
+          runtimeError("Undefined variable '%.*s'.", name->length, name->chars);
           return INTERPRET_RUNTIME_ERROR;
         }
         break;
@@ -590,7 +589,7 @@ static InterpretResult run() {
 //< get-not-instance
         ObjInstance* instance = AS_INSTANCE(peek(0));
         ObjString* name = READ_STRING();
-        
+
         Value value;
         if (tableGet(&instance->fields, name, &value)) {
           pop(); // Instance.
@@ -633,7 +632,7 @@ static InterpretResult run() {
       case OP_GET_SUPER: {
         ObjString* name = READ_STRING();
         ObjClass* superclass = AS_CLASS(pop());
-        
+
         if (!bindMethod(superclass, name)) {
           return INTERPRET_RUNTIME_ERROR;
         }
@@ -799,7 +798,7 @@ static InterpretResult run() {
 //< Closures interpret-closure
 //> Closures interpret-close-upvalue
       case OP_CLOSE_UPVALUE:
-        closeUpvalues(vm.stackTop - 1);
+        closeUpvalues(vm.stack + vm.stackCount - 1);
         pop();
         break;
 //< Closures interpret-close-upvalue
