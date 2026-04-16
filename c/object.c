@@ -124,7 +124,7 @@ static ObjString* allocateString(bool ownsChars, const char* chars, int length,
 
   push(OBJ_VAL(string));
 //< Garbage Collection push-string
-  tableSet(&vm.strings, string, NIL_VAL);
+tableSet(&vm.strings, OBJ_VAL(string), NIL_VAL);
 //> Garbage Collection pop-string
   pop();
 
