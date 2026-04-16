@@ -56,7 +56,8 @@ typedef struct {
   int stackCapacity;
 //< vm-stack
 //> Global Variables vm-globals
-  Table globals;
+  Table globalNames;
+  ValueArray globalValues;
 //< Global Variables vm-globals
 //> Hash Tables vm-strings
   Table strings;
