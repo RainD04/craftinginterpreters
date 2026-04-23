@@ -265,19 +265,24 @@ static void emitReturn() {
 }
 //< Compiling Expressions emit-return
 //> Compiling Expressions make-constant
-static uint8_t makeConstant(Value value) {
-  int constant = addConstant(currentChunk(), value);
-  if (constant > UINT8_MAX) {
-    error("Too many constants in one chunk.");
-    return 0;
-  }
+static int makeConstant(Value value) {
+  return addConstant(currentChunk(), value);
+}
 
   return (uint8_t)constant;
 }
 //< Compiling Expressions make-constant
 //> Compiling Expressions emit-constant
 static void emitConstant(Value value) {
-  emitBytes(OP_CONSTANT, makeConstant(value));
+  int constant = makeConstant(value);
+  if (constant < 256) {
+    emitBytes(OP_CONSTANT, (uint8_t)constant);
+  } else {
+    emitByte(OP_CONSTANT_LONG);
+    emitByte((uint8_t)(constant & 0xff));
+    emitByte((uint8_t)((constant >> 8) & 0xff));
+    emitByte((uint8_t)((constant >> 16) & 0xff));
+  }
 }
 //< Compiling Expressions emit-constant
 //> Jumping Back and Forth patch-jump
@@ -1115,7 +1120,8 @@ static void function(FunctionType type) {
   emitBytes(OP_CONSTANT, makeConstant(OBJ_VAL(function)));
 */
 //> Closures emit-closure
-  emitBytes(OP_CLOSURE, makeConstant(OBJ_VAL(function)));
+writeConstant(currentChunk(), OBJ_VAL(function), parser.previous.line);
+emitByte(OP_CLOSURE);
 //< Closures emit-closure
 //> Closures capture-upvalues
 

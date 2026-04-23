@@ -105,26 +105,10 @@ typedef enum {
 //< op-enum
 //> chunk-struct
 
-
-typedef struct {
-//> count-and-capacity
-  int count;
-  int capacity;
-//< count-and-capacity
-  uint8_t* code;
-//> chunk-lines
-  int* lines;
-//< chunk-lines
-//> chunk-constants
-  ValueArray constants;
-//< chunk-constants
-} Chunk;
-
 typedef struct {
   int offset;
   int line;
 } LineStart;
-
 
 typedef struct {
   int count;

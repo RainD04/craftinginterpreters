@@ -432,6 +432,9 @@ static InterpretResult run() {
 //> Closures read-constant
 #define READ_CONSTANT() \
     (frame->closure->function->chunk.constants.values[READ_BYTE()])
+#define READ_CONSTANT_LONG() \
+    (frame->closure->function->chunk.constants.values[ \
+        (int)(READ_BYTE() | (READ_BYTE() << 8) | (READ_BYTE() << 16))])
 //< Closures read-constant
 
 //< Calls and Functions run
@@ -491,13 +494,12 @@ static InterpretResult run() {
 //> op-constant
       case OP_CONSTANT: {
         Value constant = READ_CONSTANT();
-/* A Virtual Machine op-constant < A Virtual Machine push-constant
-        printValue(constant);
-        printf("\n");
-*/
-//> push-constant
         push(constant);
-//< push-constant
+        break;
+      }
+      case OP_CONSTANT_LONG: {
+        Value constant = READ_CONSTANT_LONG();
+        push(constant);
         break;
       }
 //< op-constant
@@ -819,7 +821,8 @@ static InterpretResult run() {
           return INTERPRET_OK;
         }
 
-        vm.stackCount = (int)(frame->slots - vm.stack);        push(result);
+        vm.stackCount = (int)(frame->slots - vm.stack);
+        push(result);
         frame = &vm.frames[vm.frameCount - 1];
         break;
 //< Calls and Functions interpret-return
@@ -860,6 +863,7 @@ static InterpretResult run() {
 //< Jumping Back and Forth undef-read-short
 //> undef-read-constant
 #undef READ_CONSTANT
+#undef READ_CONSTANT_LONG
 //< undef-read-constant
 //> Global Variables undef-read-string
 #undef READ_STRING
