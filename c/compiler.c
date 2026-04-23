@@ -70,6 +70,7 @@ typedef struct {
 typedef struct {
   Token name;
   int depth;
+  bool isMutable; // true for var, false for let
 //> Closures is-captured-field
   bool isCaptured;
 //< Closures is-captured-field
@@ -320,6 +321,7 @@ static void initCompiler(Compiler* compiler, FunctionType type) {
 
   Local* local = &current->locals[current->localCount++];
   local->depth = 0;
+local->isMutable = true;
 //> Closures init-zero-local-is-captured
   local->isCaptured = false;
 //< Closures init-zero-local-is-captured
@@ -510,6 +512,7 @@ static void addLocal(Token name) {
 //< too-many-locals
   Local* local = &current->locals[current->localCount++];
   local->name = name;
+local->isMutable = true;
 /* Local Variables add-local < Local Variables declare-undefined
   local->depth = current->scopeDepth;
 */
@@ -794,23 +797,16 @@ static void namedVariable(Token name, bool canAssign) {
   if (match(TOKEN_EQUAL)) {
 */
 //> named-variable-can-assign
-  if (canAssign && match(TOKEN_EQUAL)) {
-//< named-variable-can-assign
-    expression();
-/* Global Variables named-variable < Local Variables emit-set
-    emitBytes(OP_SET_GLOBAL, arg);
-*/
-//> Local Variables emit-set
-    emitBytes(setOp, (uint8_t)arg);
-//< Local Variables emit-set
-  } else {
-/* Global Variables named-variable < Local Variables emit-get
-    emitBytes(OP_GET_GLOBAL, arg);
-*/
-//> Local Variables emit-get
-    emitBytes(getOp, (uint8_t)arg);
-//< Local Variables emit-get
+ if (canAssign && match(TOKEN_EQUAL)) {
+  // Enforce single-assignment for locals declared with `let`.
+  if (getOp == OP_GET_LOCAL && !current->locals[arg].isMutable) {
+    error("Can't assign to a 'let' variable.");
   }
+  expression();
+  emitBytes(setOp, (uint8_t)arg);
+} else {
+  emitBytes(getOp, (uint8_t)arg);
+}
 //< named-variable
 }
 //< Global Variables read-named-variable
@@ -1234,6 +1230,19 @@ static void funDeclaration() {
   function(TYPE_FUNCTION);
   defineVariable(global);
 }
+static void letDeclaration() {
+  uint8_t global = parseVariable("Expect variable name.");
+  // Require an initializer for single-assignment variables.
+  consume(TOKEN_EQUAL, "Expect '=' after let variable name.");
+  expression();
+  consume(TOKEN_SEMICOLON,
+          "Expect ';' after variable declaration.");
+  // If it is a local, mark it immutable.
+  if (current->scopeDepth > 0) {
+    current->locals[current->localCount - 1].isMutable = false;
+  }
+  defineVariable(global);
+}
 //< Calls and Functions fun-declaration
 //> Global Variables var-declaration
 static void varDeclaration() {
@@ -1413,6 +1422,7 @@ static void synchronize() {
       case TOKEN_CLASS:
       case TOKEN_FUN:
       case TOKEN_VAR:
+case TOKEN_LET:
       case TOKEN_FOR:
       case TOKEN_IF:
       case TOKEN_WHILE:
@@ -1443,13 +1453,13 @@ static void declaration() {
 /* Global Variables match-var < Calls and Functions match-fun
   if (match(TOKEN_VAR)) {
 */
-  } else if (match(TOKEN_VAR)) {
-//< Calls and Functions match-fun
-//> match-var
-    varDeclaration();
-  } else {
-    statement();
-  }
+} else if (match(TOKEN_VAR)) {
+  varDeclaration();
+} else if (match(TOKEN_LET)) {
+  letDeclaration();
+} else {
+  statement();
+}
 //< match-var
 /* Global Variables declaration < Global Variables match-var
   statement();
