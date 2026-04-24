@@ -19,6 +19,7 @@ class Scanner {
     keywords.put("case",    CASE);
     keywords.put("class",   CLASS);
     keywords.put("default", DEFAULT);
+    keywords.put("continue", CONTINUE);
     keywords.put("else",   ELSE);
     keywords.put("false",  FALSE);
     keywords.put("for",    FOR);
@@ -73,6 +74,7 @@ class Scanner {
       case '+': addToken(PLUS); break;
       case ';': addToken(SEMICOLON); break;
       case ':': addToken(COLON); break;
+      case '?': addToken(QUESTION); break;
       case '*': addToken(STAR); break; // [slash]
 //> two-char-tokens
       case '!':
