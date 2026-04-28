@@ -69,7 +69,7 @@ static void runtimeError(const char* format, ...) {
     ObjFunction* function = frame->function;
 */
 //> Closures runtime-error-function
-    ObjFunction* function = frame->closure->function;
+ObjFunction* function = frameFunction(frame);
 //< Closures runtime-error-function
     size_t instruction = frame->ip - function->chunk.code - 1;
     fprintf(stderr, "[line %d] in ", // [minus]
@@ -176,14 +176,49 @@ Value pop() {
 static Value peek(int distance) {
   return vm.stack[vm.stackCount - 1 - distance];
 }
+static inline ObjFunction* frameFunction(CallFrame* frame) {
+  if (frame->function->type == OBJ_CLOSURE) {
+    return ((ObjClosure*)frame->function)->function;
+  }
+  return (ObjFunction*)frame->function; // OBJ_FUNCTION
+}
+static inline ObjClosure* frameClosure(CallFrame* frame) {
+  if (frame->function->type != OBJ_CLOSURE) return NULL;
+  return (ObjClosure*)frame->function;
+}
+// Wrap plain functions as closures on demand.
+static inline ObjClosure* asClosure(Value value) {
+  if (IS_CLOSURE(value)) return AS_CLOSURE(value);
+  return newClosure(AS_FUNCTION(value));
+}
 //< Types of Values peek
 /* Calls and Functions call < Closures call-signature
 static bool call(ObjFunction* function, int argCount) {
 */
 //> Calls and Functions call
 //> Closures call-signature
-static bool call(ObjClosure* closure, int argCount) {
-//< Closures call-signature
+static bool callImpl(Obj* calleeObj, ObjFunction* function, int argCount) {
+  if (argCount != function->arity) {
+    runtimeError("Expected %d arguments but got %d.",
+        function->arity, argCount);
+    return false;
+  }
+  if (vm.frameCount == FRAMES_MAX) {
+    runtimeError("Stack overflow.");
+    return false;
+  }
+  CallFrame* frame = &vm.frames[vm.frameCount++];
+  frame->function = calleeObj; // OBJ_FUNCTION or OBJ_CLOSURE
+  frame->ip = function->chunk.code;
+  frame->slots = vm.stack + vm.stackCount - argCount - 1;
+  return true;
+}
+static bool callFunction(ObjFunction* function, int argCount) {
+  return callImpl((Obj*)function, function, argCount);
+}
+static bool callClosure(ObjClosure* closure, int argCount) {
+  return callImpl((Obj*)closure, closure->function, argCount);
+}//< Closures call-signature
 /* Calls and Functions check-arity < Closures check-arity
   if (argCount != function->arity) {
     runtimeError("Expected %d arguments but got %d.",
@@ -229,8 +264,7 @@ static bool callValue(Value callee, int argCount) {
 //> store-receiver
         vm.stack[vm.stackCount - argCount - 1] = bound->receiver;
         //< store-receiver
-        return call(bound->method, argCount);
-      }
+	return callClosure(bound->method, argCount);      }
 //< Methods and Initializers call-bound-method
 //> Classes and Instances call-class
       case OBJ_CLASS: {
@@ -253,8 +287,10 @@ static bool callValue(Value callee, int argCount) {
       }
 //< Classes and Instances call-class
 //> Closures call-value-closure
-      case OBJ_CLOSURE:
-        return call(AS_CLOSURE(callee), argCount);
+     case OBJ_CLOSURE:
+  return callClosure(AS_CLOSURE(callee), argCount);
+case OBJ_FUNCTION:
+  return callFunction(AS_FUNCTION(callee), argCount);
 //< Closures call-value-closure
 /* Calls and Functions call-value < Closures call-value-closure
       case OBJ_FUNCTION: // [switch]
@@ -285,8 +321,7 @@ static bool invokeFromClass(ObjClass* klass, ObjString* name,
     runtimeError("Undefined property '%.*s'.", name->length, name->chars);
     return false;
   }
-  return call(AS_CLOSURE(method), argCount);
-}
+return callClosure(asClosure(method), argCount);}
 //< Methods and Initializers invoke-from-class
 //> Methods and Initializers invoke
 static bool invoke(ObjString* name, int argCount) {
@@ -320,8 +355,9 @@ static bool bindMethod(ObjClass* klass, ObjString* name) {
     return false;
   }
 
-  ObjBoundMethod* bound = newBoundMethod(peek(0),
-                                         AS_CLOSURE(method));
+ObjBoundMethod* bound = newBoundMethod(peek(0),
+
+                                       asClosure(method));
   pop();
   push(OBJ_VAL(bound));
   return true;
@@ -431,9 +467,9 @@ static InterpretResult run() {
 */
 //> Closures read-constant
 #define READ_CONSTANT() \
-    (frame->closure->function->chunk.constants.values[READ_BYTE()])
+    (frameFunction(frame)->chunk.constants.values[READ_BYTE()])
 #define READ_CONSTANT_LONG() \
-    (frame->closure->function->chunk.constants.values[ \
+    (frameFunction(frame)->chunk.constants.values[ \
         (int)(READ_BYTE() | (READ_BYTE() << 8) | (READ_BYTE() << 16))])
 //< Closures read-constant
 
@@ -483,8 +519,8 @@ static InterpretResult run() {
         (int)(frame->ip - frame->function->chunk.code));
 */
 //> Closures disassemble-instruction
-    disassembleInstruction(&frame->closure->function->chunk,
-        (int)(frame->ip - frame->closure->function->chunk.code));
+ disassembleInstruction(&frameFunction(frame)->chunk,
+    (int)(frame->ip - frameFunction(frame)->chunk.code));
 //< Closures disassemble-instruction
 #endif
 
@@ -563,18 +599,20 @@ static InterpretResult run() {
       }
 //< Global Variables interpret-set-global
 //> Closures interpret-get-upvalue
-      case OP_GET_UPVALUE: {
-        uint8_t slot = READ_BYTE();
-        push(*frame->closure->upvalues[slot]->location);
-        break;
-      }
+    case OP_GET_UPVALUE: {
+  uint8_t slot = READ_BYTE();
+  ObjClosure* closure = frameClosure(frame);
+  push(*closure->upvalues[slot]->location);
+  break;
+}
 //< Closures interpret-get-upvalue
 //> Closures interpret-set-upvalue
-      case OP_SET_UPVALUE: {
-        uint8_t slot = READ_BYTE();
-        *frame->closure->upvalues[slot]->location = peek(0);
-        break;
-      }
+case OP_SET_UPVALUE: {
+  uint8_t slot = READ_BYTE();
+  ObjClosure* closure = frameClosure(frame);
+  *closure->upvalues[slot]->location = peek(0);
+  break;
+}
 //< Closures interpret-set-upvalue
 //> Classes and Instances interpret-get-property
       case OP_GET_PROPERTY: {
@@ -786,9 +824,9 @@ static InterpretResult run() {
           if (isLocal) {
             closure->upvalues[i] =
                 captureUpvalue(frame->slots + index);
-          } else {
-            closure->upvalues[i] = frame->closure->upvalues[index];
-          }
+        } else {
+  ObjClosure* enclosing = frameClosure(frame);
+  closure->upvalues[i] = enclosing->upvalues[index];
         }
 //< interpret-capture-upvalues
         break;
@@ -923,10 +961,7 @@ InterpretResult interpret(const char* source) {
   call(function, 0);
 */
 //> Closures interpret
-  ObjClosure* closure = newClosure(function);
-  pop();
-  push(OBJ_VAL(closure));
-  call(closure, 0);
+callFunction(function, 0);
 //< Closures interpret
 //< Scanning on Demand vm-interpret-c
 //> Compiling Expressions interpret-chunk

@@ -272,9 +272,6 @@ static void emitReturn() {
 static int makeConstant(Value value) {
   return addConstant(currentChunk(), value);
 }
-
-  return (uint8_t)constant;
-}
 //< Compiling Expressions make-constant
 //> Compiling Expressions emit-constant
 static void emitConstant(Value value) {
@@ -1120,20 +1117,25 @@ static void function(FunctionType type) {
   block();
 
   ObjFunction* function = endCompiler();
-/* Calls and Functions compile-function < Closures emit-closure
-  emitBytes(OP_CONSTANT, makeConstant(OBJ_VAL(function)));
-*/
-//> Closures emit-closure
-writeConstant(currentChunk(), OBJ_VAL(function), parser.previous.line);
-emitByte(OP_CLOSURE);
-//< Closures emit-closure
-//> Closures capture-upvalues
 
-  for (int i = 0; i < function->upvalueCount; i++) {
-    emitByte(compiler.upvalues[i].isLocal ? 1 : 0);
-    emitByte(compiler.upvalues[i].index);
+  // Only wrap in a closure if the function actually captures upvalues.
+  if (function->upvalueCount > 0) {
+    int constant = makeConstant(OBJ_VAL(function));
+    if (constant > UINT8_MAX) {
+      error("Too many constants in one chunk.");
+      constant = 0;
+    }
+
+    emitBytes(OP_CLOSURE, (uint8_t)constant);
+
+    for (int i = 0; i < function->upvalueCount; i++) {
+      emitByte(compiler.upvalues[i].isLocal ? 1 : 0);
+      emitByte(compiler.upvalues[i].index);
+    }
+  } else {
+    // No upvalues: emit the function object directly as a constant.
+    emitConstant(OBJ_VAL(function));
   }
-//< Closures capture-upvalues
 }
 //< Calls and Functions compile-function
 //> Methods and Initializers method

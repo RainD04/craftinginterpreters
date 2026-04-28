@@ -28,10 +28,9 @@
 
 typedef struct {
 /* Calls and Functions call-frame < Closures call-frame-closure
-  ObjFunction* function;
 */
 //> Closures call-frame-closure
-  ObjClosure* closure;
+  Obj* function; // OBJ_FUNCTION or OBJ_CLOSURE
 //< Closures call-frame-closure
   uint8_t* ip;
   Value* slots;
