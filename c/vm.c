@@ -444,11 +444,12 @@ static void concatenate() {
 static InterpretResult run() {
 //> Calls and Functions run
   CallFrame* frame = &vm.frames[vm.frameCount - 1];
+  register uint8_t* ip = frame->ip;
 
 /* A Virtual Machine run < Calls and Functions run
 #define READ_BYTE() (*vm.ip++)
 */
-#define READ_BYTE() (*frame->ip++)
+#define READ_BYTE() (*ip++)
 /* A Virtual Machine read-constant < Calls and Functions run
 #define READ_CONSTANT() (vm.chunk->constants.values[READ_BYTE()])
 */
@@ -458,8 +459,7 @@ static InterpretResult run() {
     (vm.ip += 2, (uint16_t)((vm.ip[-2] << 8) | vm.ip[-1]))
 */
 #define READ_SHORT() \
-    (frame->ip += 2, \
-    (uint16_t)((frame->ip[-2] << 8) | frame->ip[-1]))
+    (ip += 2, (uint16_t)((ip[-2] << 8) | ip[-1]))
 
 /* Calls and Functions run < Closures read-constant
 #define READ_CONSTANT() \
@@ -489,6 +489,7 @@ static InterpretResult run() {
 #define BINARY_OP(valueType, op) \
     do { \
       if (!IS_NUMBER(peek(0)) || !IS_NUMBER(peek(1))) { \
+        frame->ip = ip; \
         runtimeError("Operands must be numbers."); \
         return INTERPRET_RUNTIME_ERROR; \
       } \
@@ -510,18 +511,9 @@ static InterpretResult run() {
     }
     printf("\n");
 //< trace-stack
-/* A Virtual Machine trace-execution < Calls and Functions trace-execution
-    disassembleInstruction(vm.chunk,
-                           (int)(vm.ip - vm.chunk->code));
-*/
-/* Calls and Functions trace-execution < Closures disassemble-instruction
-    disassembleInstruction(&frame->function->chunk,
-        (int)(frame->ip - frame->function->chunk.code));
-*/
-//> Closures disassemble-instruction
- disassembleInstruction(&frameFunction(frame)->chunk,
-    (int)(frame->ip - frameFunction(frame)->chunk.code));
-//< Closures disassemble-instruction
+    frame->ip = ip;
+    disassembleInstruction(&frameFunction(frame)->chunk,
+        (int)(ip - frameFunction(frame)->chunk.code));
 #endif
 
 //< trace-execution
@@ -576,6 +568,7 @@ static InterpretResult run() {
        case OP_GET_GLOBAL: {
         Value value = vm.globalValues.values[READ_BYTE()];
         if (IS_UNDEFINED(value)) {
+          frame->ip = ip;
           runtimeError("Undefined variable.");
           return INTERPRET_RUNTIME_ERROR;
         }
@@ -591,6 +584,7 @@ static InterpretResult run() {
       case OP_SET_GLOBAL: {
         uint8_t index = READ_BYTE();
         if (IS_UNDEFINED(vm.globalValues.values[index])) {
+          frame->ip = ip;
           runtimeError("Undefined variable.");
           return INTERPRET_RUNTIME_ERROR;
         }
@@ -708,6 +702,7 @@ case OP_SET_UPVALUE: {
           double a = AS_NUMBER(pop());
           push(NUMBER_VAL(a + b));
         } else {
+          frame->ip = ip;
           runtimeError(
               "Operands must be two numbers or two strings.");
           return INTERPRET_RUNTIME_ERROR;
@@ -728,6 +723,7 @@ case OP_SET_UPVALUE: {
 //> Types of Values op-negate
       case OP_NEGATE:
         if (!IS_NUMBER(peek(0))) {
+          frame->ip = ip;
           runtimeError("Operand must be a number.");
           return INTERPRET_RUNTIME_ERROR;
         }
@@ -744,48 +740,33 @@ case OP_SET_UPVALUE: {
 //> Jumping Back and Forth op-jump
       case OP_JUMP: {
         uint16_t offset = READ_SHORT();
-/* Jumping Back and Forth op-jump < Calls and Functions jump
-        vm.ip += offset;
-*/
-//> Calls and Functions jump
-        frame->ip += offset;
-//< Calls and Functions jump
+        ip += offset;
         break;
       }
 //< Jumping Back and Forth op-jump
 //> Jumping Back and Forth op-jump-if-false
       case OP_JUMP_IF_FALSE: {
         uint16_t offset = READ_SHORT();
-/* Jumping Back and Forth op-jump-if-false < Calls and Functions jump-if-false
-        if (isFalsey(peek(0))) vm.ip += offset;
-*/
-//> Calls and Functions jump-if-false
-        if (isFalsey(peek(0))) frame->ip += offset;
-//< Calls and Functions jump-if-false
+        if (isFalsey(peek(0))) ip += offset;
         break;
       }
 //< Jumping Back and Forth op-jump-if-false
 //> Jumping Back and Forth op-loop
       case OP_LOOP: {
         uint16_t offset = READ_SHORT();
-/* Jumping Back and Forth op-loop < Calls and Functions loop
-        vm.ip -= offset;
-*/
-//> Calls and Functions loop
-        frame->ip -= offset;
-//< Calls and Functions loop
+        ip -= offset;
         break;
       }
 //< Jumping Back and Forth op-loop
 //> Calls and Functions interpret-call
       case OP_CALL: {
         int argCount = READ_BYTE();
+        frame->ip = ip;
         if (!callValue(peek(argCount), argCount)) {
           return INTERPRET_RUNTIME_ERROR;
         }
-//> update-frame-after-call
         frame = &vm.frames[vm.frameCount - 1];
-//< update-frame-after-call
+        ip = frame->ip;
         break;
       }
 //< Calls and Functions interpret-call
@@ -839,21 +820,8 @@ case OP_SET_UPVALUE: {
         break;
 //< Closures interpret-close-upvalue
       case OP_RETURN: {
-/* A Virtual Machine print-return < Global Variables op-return
-        printValue(pop());
-        printf("\n");
-*/
-/* Global Variables op-return < Calls and Functions interpret-return
-        // Exit interpreter.
-*/
-/* A Virtual Machine run < Calls and Functions interpret-return
-        return INTERPRET_OK;
-*/
-//> Calls and Functions interpret-return
         Value result = pop();
-//> Closures return-close-upvalues
         closeUpvalues(frame->slots);
-//< Closures return-close-upvalues
         vm.frameCount--;
         if (vm.frameCount == 0) {
           pop();
@@ -863,8 +831,8 @@ case OP_SET_UPVALUE: {
         vm.stackCount = (int)(frame->slots - vm.stack);
         push(result);
         frame = &vm.frames[vm.frameCount - 1];
+        ip = frame->ip;
         break;
-//< Calls and Functions interpret-return
       }
 //> Classes and Instances interpret-class
       case OP_CLASS:
