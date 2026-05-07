@@ -87,6 +87,17 @@ static bool setFieldNative(int argCount, Value* args) {
   return true;
 }
 
+static bool deleteFieldNative(int argCount, Value* args) {
+  if (argCount != 2) { args[-1] = NIL_VAL; return true; }
+  if (!IS_INSTANCE(args[0])) { args[-1] = NIL_VAL; return true; }
+  if (!IS_STRING(args[1])) { args[-1] = NIL_VAL; return true; }
+
+  ObjInstance* instance = AS_INSTANCE(args[0]);
+  tableDelete(&instance->fields, AS_STRING(args[1]));
+  args[-1] = NIL_VAL;
+  return true;
+}
+
 //> reset-stack
 static void resetStack() {
   vm.stackCount = 0;
@@ -163,6 +174,7 @@ defineNative("clock", clockNative);
   defineNative("strlen", strlenNative);
   defineNative("getField", getFieldNative);
   defineNative("setField", setFieldNative);
+  defineNative("deleteField", deleteFieldNative);
   defineNative("hasField", hasFieldNative);
 //< call-reset-stack
 //> Strings init-objects-root
