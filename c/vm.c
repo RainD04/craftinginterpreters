@@ -347,10 +347,8 @@ static bool callValue(Value callee, int argCount) {
         ObjClass* klass = AS_CLASS(callee);
         vm.stack[vm.stackCount - argCount - 1] = OBJ_VAL(newInstance(klass));
         //> Methods and Initializers call-init
-        Value initializer;
-        if (tableGet(&klass->methods, vm.initString,
-                     &initializer)) {
-          return call(AS_CLOSURE(initializer), argCount);
+         if (!IS_NIL(klass->initializer)) {
+          return callClosure(AS_CLOSURE(klass->initializer), argCount);
 //> no-init-arity-error
         } else if (argCount != 0) {
           runtimeError("Expected 0 arguments but got %d.",
@@ -487,6 +485,7 @@ static void defineMethod(ObjString* name) {
   Value method = peek(0);
   ObjClass* klass = AS_CLASS(peek(1));
   tableSet(&klass->methods, name, method);
+  if (name == vm.initString) klass->initializer = method; // <--
   pop();
 }
 //< Methods and Initializers define-method
