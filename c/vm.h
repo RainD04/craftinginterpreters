@@ -47,7 +47,8 @@ typedef struct {
 //> Calls and Functions frame-array
   CallFrame frames[FRAMES_MAX];
   int frameCount;
-  
+  uint16_t nextClassID;
+
 //< Calls and Functions frame-array
 //> vm-stack
   Value* stack;

@@ -167,6 +167,7 @@ void initVM() {
   vm.stackCapacity = 0;
 //> call-reset-stack
   resetStack();
+vm.nextClassID = 0;
 
 defineNative("clock", clockNative);
   defineNative("sqrt", sqrtNative);
@@ -295,40 +296,6 @@ static bool callFunction(ObjFunction* function, int argCount) {
 static bool callClosure(ObjClosure* closure, int argCount) {
   return callImpl((Obj*)closure, closure->function, argCount);
 }//< Closures call-signature
-/* Calls and Functions check-arity < Closures check-arity
-  if (argCount != function->arity) {
-    runtimeError("Expected %d arguments but got %d.",
-        function->arity, argCount);
-*/
-//> Closures check-arity
-  if (argCount != closure->function->arity) {
-    runtimeError("Expected %d arguments but got %d.",
-        closure->function->arity, argCount);
-//< Closures check-arity
-//> check-arity
-    return false;
-  }
-
-//< check-arity
-//> check-overflow
-  if (vm.frameCount == FRAMES_MAX) {
-    runtimeError("Stack overflow.");
-    return false;
-  }
-
-//< check-overflow
-  CallFrame* frame = &vm.frames[vm.frameCount++];
-/* Calls and Functions call < Closures call-init-closure
-  frame->function = function;
-  frame->ip = function->chunk.code;
-*/
-//> Closures call-init-closure
-  frame->closure = closure;
-  frame->ip = closure->function->chunk.code;
-//< Closures call-init-closure
-  frame->slots = vm.stack + vm.stackCount - argCount - 1;
-  return true;
-}
 //< Calls and Functions call
 //> Calls and Functions call-value
 static bool callValue(Value callee, int argCount) {
@@ -348,8 +315,8 @@ static bool callValue(Value callee, int argCount) {
         vm.stack[vm.stackCount - argCount - 1] = OBJ_VAL(newInstance(klass));
         //> Methods and Initializers call-init
          if (!IS_NIL(klass->initializer)) {
-          return callClosure(AS_CLOSURE(klass->initializer), argCount);
-//> no-init-arity-error
+		return callClosure(asClosure(klass->initializer), argCount);
+	//> no-init-arity-error
         } else if (argCount != 0) {
           runtimeError("Expected 0 arguments but got %d.",
                        argCount);
@@ -371,16 +338,18 @@ case OBJ_FUNCTION:
         return call(AS_FUNCTION(callee), argCount);
 */
 //> call-native
-      case OBJ_NATIVE: {
-        NativeFn native = AS_NATIVE(callee);
-          if (native(argCount, vm.stackTop - argCount)) {
-          vm.stackTop -= argCount;
-          return true;
-        } else {
-          runtimeError(AS_STRING(vm.stackTop[-argCount - 1])->chars);
-          return false;
-        }
-      }
+  case OBJ_NATIVE: {
+  NativeFn native = AS_NATIVE(callee);
+  Value* args = vm.stack + vm.stackCount - argCount;
+  if (native(argCount, args)) {
+    // native writes result into args[-1]
+    vm.stackCount -= argCount;
+    return true;
+  } else {
+    runtimeError(AS_STRING(args[-1])->chars);
+    return false;
+  }
+}
 //< call-native
       default:
         break; // Non-callable object type.
@@ -736,17 +705,6 @@ case OP_SET_UPVALUE: {
         break;
       }
 //< Classes and Instances interpret-set-property
-//> Superclasses interpret-get-super
-      case OP_GET_SUPER: {
-        ObjString* name = READ_STRING();
-        ObjClass* superclass = AS_CLASS(pop());
-
-        if (!bindMethod(superclass, name)) {
-          return INTERPRET_RUNTIME_ERROR;
-        }
-        break;
-      }
-//< Superclasses interpret-get-super
 //> Types of Values interpret-equal
       case OP_EQUAL: {
         Value b = pop();
@@ -856,21 +814,20 @@ case OP_SET_UPVALUE: {
           return INTERPRET_RUNTIME_ERROR;
         }
         frame = &vm.frames[vm.frameCount - 1];
+        ip = frame->ip;
         break;
       }
 //< Methods and Initializers interpret-invoke
-//> Superclasses interpret-super-invoke
-      case OP_SUPER_INVOKE: {
+      case OP_INNER: {
         ObjString* method = READ_STRING();
         int argCount = READ_BYTE();
-        ObjClass* superclass = AS_CLASS(pop());
-        if (!invokeFromClass(superclass, method, argCount)) {
+        if (!invoke(method, argCount)) {
           return INTERPRET_RUNTIME_ERROR;
         }
         frame = &vm.frames[vm.frameCount - 1];
+        ip = frame->ip;
         break;
       }
-//< Superclasses interpret-super-invoke
 //> Closures interpret-closure
       case OP_CLOSURE: {
         ObjFunction* function = AS_FUNCTION(READ_CONSTANT());
@@ -913,9 +870,12 @@ case OP_SET_UPVALUE: {
         break;
       }
 //> Classes and Instances interpret-class
-      case OP_CLASS:
-        push(OBJ_VAL(newClass(READ_STRING())));
+      case OP_CLASS: {
+        ObjString* name = READ_STRING();
+        uint16_t id = READ_SHORT();
+        push(OBJ_VAL(newClass(name, id)));
         break;
+      }
 //< Classes and Instances interpret-class
 //> Superclasses interpret-inherit
       case OP_INHERIT: {

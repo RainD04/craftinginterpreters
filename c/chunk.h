@@ -44,9 +44,6 @@ typedef enum {
   OP_GET_PROPERTY,
   OP_SET_PROPERTY,
 //< Classes and Instances property-ops
-//> Superclasses get-super-op
-  OP_GET_SUPER,
-//< Superclasses get-super-op
 //> Types of Values comparison-ops
   OP_EQUAL,
   OP_GREATER,
@@ -83,7 +80,7 @@ typedef enum {
   OP_INVOKE,
 //< Methods and Initializers invoke-op
 //> Superclasses super-invoke-op
-  OP_SUPER_INVOKE,
+  OP_INNER,
 //< Superclasses super-invoke-op
 //> Closures closure-op
   OP_CLOSURE,

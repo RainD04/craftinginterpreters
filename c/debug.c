@@ -48,6 +48,17 @@ static int invokeInstruction(const char* name, Chunk* chunk,
   printf("'\n");
   return offset + 3;
 }
+
+static int classInstruction(const char* name, Chunk* chunk, int offset) {
+  uint8_t constant = chunk->code[offset + 1];
+  uint16_t id = (uint16_t)(chunk->code[offset + 2] << 8);
+  id |= chunk->code[offset + 3];
+
+  printf("%-16s id=%u %4d '", name, id, constant);
+  printValue(chunk->constants.values[constant]);
+  printf("'\n");
+  return offset + 4;
+}
 //< Methods and Initializers invoke-instruction
 //> simple-instruction
 static int simpleInstruction(const char* name, int offset) {
@@ -84,7 +95,7 @@ int disassembleInstruction(Chunk* chunk, int offset) {
     printf("%4d ", line);
 }
 //< show-location
-  
+
   uint8_t instruction = chunk->code[offset];
   switch (instruction) {
 //> disassemble-constant
@@ -136,10 +147,6 @@ int disassembleInstruction(Chunk* chunk, int offset) {
     case OP_SET_PROPERTY:
       return constantInstruction("OP_SET_PROPERTY", chunk, offset);
 //< Classes and Instances disassemble-property-ops
-//> Superclasses disassemble-get-super
-    case OP_GET_SUPER:
-      return constantInstruction("OP_GET_SUPER", chunk, offset);
-//< Superclasses disassemble-get-super
 //> Types of Values disassemble-comparison
     case OP_EQUAL:
       return simpleInstruction("OP_EQUAL", offset);
@@ -188,10 +195,8 @@ int disassembleInstruction(Chunk* chunk, int offset) {
     case OP_INVOKE:
       return invokeInstruction("OP_INVOKE", chunk, offset);
 //< Methods and Initializers disassemble-invoke
-//> Superclasses disassemble-super-invoke
-    case OP_SUPER_INVOKE:
-      return invokeInstruction("OP_SUPER_INVOKE", chunk, offset);
-//< Superclasses disassemble-super-invoke
+    case OP_INNER:
+      return invokeInstruction("OP_INNER", chunk, offset);
 //> Closures disassemble-closure
     case OP_CLOSURE: {
       offset++;
@@ -209,7 +214,7 @@ int disassembleInstruction(Chunk* chunk, int offset) {
         printf("%04d      |                     %s %d\n",
                offset - 2, isLocal ? "local" : "upvalue", index);
       }
-      
+
 //< disassemble-upvalues
       return offset;
     }
@@ -220,10 +225,8 @@ int disassembleInstruction(Chunk* chunk, int offset) {
 //< Closures disassemble-close-upvalue
     case OP_RETURN:
       return simpleInstruction("OP_RETURN", offset);
-//> Classes and Instances disassemble-class
     case OP_CLASS:
-      return constantInstruction("OP_CLASS", chunk, offset);
-//< Classes and Instances disassemble-class
+      return classInstruction("OP_CLASS", chunk, offset);
 //> Superclasses disassemble-inherit
     case OP_INHERIT:
       return simpleInstruction("OP_INHERIT", offset);

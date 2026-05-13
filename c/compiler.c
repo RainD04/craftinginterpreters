@@ -124,6 +124,8 @@ typedef struct Compiler {
 
 typedef struct ClassCompiler {
   struct ClassCompiler* enclosing;
+  uint16_t id;
+  Token methodName;
 //> Superclasses has-superclass
   bool hasSuperclass;
 //< Superclasses has-superclass
@@ -834,40 +836,43 @@ static Token syntheticToken(const char* text) {
   return token;
 }
 //< Superclasses synthetic-token
-//> Superclasses super
-static void super_(bool canAssign) {
-//> super-errors
+//> Superclasses inner
+static void inner_(bool canAssign) {
+  (void)canAssign;
+
   if (currentClass == NULL) {
-    error("Can't use 'super' outside of a class.");
-  } else if (!currentClass->hasSuperclass) {
-    error("Can't use 'super' in a class with no superclass.");
+    error("Can't use 'inner' outside of a class.");
+    return;
   }
 
-//< super-errors
-  consume(TOKEN_DOT, "Expect '.' after 'super'.");
-  consume(TOKEN_IDENTIFIER, "Expect superclass method name.");
-  uint8_t name = identifierConstant(&parser.previous);
-//> super-get
-
-  namedVariable(syntheticToken("this"), false);
-/* Superclasses super-get < Superclasses super-invoke
-  namedVariable(syntheticToken("super"), false);
-  emitBytes(OP_GET_SUPER, name);
-*/
-//< super-get
-//> super-invoke
-  if (match(TOKEN_LEFT_PAREN)) {
-    uint8_t argCount = argumentList();
-    namedVariable(syntheticToken("super"), false);
-    emitBytes(OP_SUPER_INVOKE, name);
-    emitByte(argCount);
-  } else {
-    namedVariable(syntheticToken("super"), false);
-    emitBytes(OP_GET_SUPER, name);
+  if (currentClass->methodName.start == NULL) {
+    error("Can't use 'inner' outside of a method.");
+    return;
   }
-//< super-invoke
+
+  consume(TOKEN_LEFT_PAREN, "Expect '(' after 'inner'.");
+  uint8_t argCount = argumentList();
+
+  // Build a unique method key like "<methodName>@<classId>".
+  char buffer[128];
+  int n = snprintf(buffer, sizeof(buffer), "%.*s@%u",
+                   currentClass->methodName.length,
+                   currentClass->methodName.start,
+                   (unsigned)currentClass->id);
+  if (n < 0) n = 0;
+  if (n >= (int)sizeof(buffer)) n = (int)sizeof(buffer) - 1;
+
+  ObjString* key = copyString(buffer, n);
+  int constant = makeConstant(OBJ_VAL(key));
+  if (constant > UINT8_MAX) {
+    error("Too many constants in one chunk.");
+    constant = 0;
+  }
+
+  emitBytes(OP_INNER, (uint8_t)constant);
+  emitByte(argCount);
 }
-//< Superclasses super
+//< Superclasses inner
 //> Methods and Initializers this
 static void this_(bool canAssign) {
 //> this-outside-class
@@ -1007,7 +1012,7 @@ ParseRule rules[] = {
   [TOKEN_SUPER]         = {NULL,     NULL,   PREC_NONE},
 */
 //> Superclasses table-super
-  [TOKEN_SUPER]         = {super_,   NULL,   PREC_NONE},
+  [TOKEN_INNER]         = {inner_,   NULL,   PREC_NONE},
 //< Superclasses table-super
 /* Compiling Expressions rules < Methods and Initializers table-this
   [TOKEN_THIS]          = {NULL,     NULL,   PREC_NONE},
@@ -1142,97 +1147,59 @@ static void function(FunctionType type) {
 static void method() {
   consume(TOKEN_IDENTIFIER, "Expect method name.");
   uint8_t constant = identifierConstant(&parser.previous);
-//> method-body
-
-//< method-body
-/* Methods and Initializers method-body < Methods and Initializers method-type
-  FunctionType type = TYPE_FUNCTION;
-*/
-//> method-type
+  if (currentClass != NULL) currentClass->methodName = parser.previous;
   FunctionType type = TYPE_METHOD;
-//< method-type
-//> initializer-name
   if (parser.previous.length == 4 &&
       memcmp(parser.previous.start, "init", 4) == 0) {
     type = TYPE_INITIALIZER;
   }
-  
-//< initializer-name
-//> method-body
   function(type);
-//< method-body
   emitBytes(OP_METHOD, constant);
 }
 //< Methods and Initializers method
 //> Classes and Instances class-declaration
 static void classDeclaration() {
   consume(TOKEN_IDENTIFIER, "Expect class name.");
-//> Methods and Initializers class-name
   Token className = parser.previous;
-//< Methods and Initializers class-name
   uint8_t nameConstant = identifierConstant(&parser.previous);
   declareVariable();
 
   emitBytes(OP_CLASS, nameConstant);
+  // Emit class id as two bytes after OP_CLASS.
+  ClassCompiler classCompiler;
+  classCompiler.hasSuperclass = false;
+  classCompiler.enclosing = currentClass;
+  classCompiler.methodName.start = NULL;
+  classCompiler.id = vm.nextClassID++;
+  currentClass = &classCompiler;
+  emitByte((currentClass->id >> 8) & 0xff);
+  emitByte(currentClass->id & 0xff);
   defineVariable(nameConstant);
 
-//> Methods and Initializers create-class-compiler
-  ClassCompiler classCompiler;
-//> Superclasses init-has-superclass
-  classCompiler.hasSuperclass = false;
-//< Superclasses init-has-superclass
-  classCompiler.enclosing = currentClass;
-  currentClass = &classCompiler;
-
-//< Methods and Initializers create-class-compiler
-//> Superclasses compile-superclass
   if (match(TOKEN_LESS)) {
     consume(TOKEN_IDENTIFIER, "Expect superclass name.");
     variable(false);
-//> inherit-self
-
     if (identifiersEqual(&className, &parser.previous)) {
       error("A class can't inherit from itself.");
     }
-
-//< inherit-self
-//> superclass-variable
     beginScope();
     addLocal(syntheticToken("super"));
     defineVariable(0);
-    
-//< superclass-variable
     namedVariable(className, false);
     emitByte(OP_INHERIT);
-//> set-has-superclass
     classCompiler.hasSuperclass = true;
-//< set-has-superclass
   }
-  
-//< Superclasses compile-superclass
-//> Methods and Initializers load-class
   namedVariable(className, false);
-//< Methods and Initializers load-class
   consume(TOKEN_LEFT_BRACE, "Expect '{' before class body.");
-//> Methods and Initializers class-body
   while (!check(TOKEN_RIGHT_BRACE) && !check(TOKEN_EOF)) {
     method();
   }
-//< Methods and Initializers class-body
   consume(TOKEN_RIGHT_BRACE, "Expect '}' after class body.");
-//> Methods and Initializers pop-class
   emitByte(OP_POP);
-//< Methods and Initializers pop-class
-//> Superclasses end-superclass-scope
-
   if (classCompiler.hasSuperclass) {
     endScope();
   }
-//< Superclasses end-superclass-scope
-//> Methods and Initializers pop-enclosing
-
   currentClass = currentClass->enclosing;
-//< Methods and Initializers pop-enclosing
 }
 //< Classes and Instances class-declaration
 //> Calls and Functions fun-declaration
