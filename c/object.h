@@ -82,6 +82,7 @@ typedef enum {
   OBJ_NATIVE,
 //< Calls and Functions obj-type-native
   OBJ_STRING,
+  OBJ_SHORT_STRING,
 //> Closures obj-type-upvalue
   OBJ_UPVALUE
 //< Closures obj-type-upvalue
@@ -128,6 +129,12 @@ struct ObjString {
 //> Hash Tables obj-string-hash
   uint32_t hash;
 //< Hash Tables obj-string-hash
+};
+
+struct ObjShortString {
+    Obj obj;
+    char chars[8];
+    uint32_t hash;
 };
 //< obj-string
 //> Closures obj-upvalue

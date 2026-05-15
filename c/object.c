@@ -134,6 +134,17 @@ tableSet(&vm.strings, OBJ_VAL(string), NIL_VAL);
 //< Hash Tables allocate-store-string
   return string;
 }
+
+Value takeStringValue(char* chars, int length) {
+  if (length <= SHORT_STRING_MAX) {
+    Value value = SHORT_STRING_VAL(chars, length);
+    FREE_ARRAY(char, chars, length + 1);
+    return value;
+  }
+
+  return OBJ_VAL(takeString(chars,length));
+}
+
 //< allocate-string
 //> Hash Tables hash-string
 static uint32_t hashString(const char* key, int length) {
